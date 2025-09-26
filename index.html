@@ -1,0 +1,614 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Sanjeev's Game Picture Rebuild Puzzle — 3 Minute Challenge</title>
+<style>
+  :root{
+    --bg:#f4f7fb;
+    --card:#fff;
+    --accent:#1f3c88;
+    --muted:#6b7280;
+  }
+  body{
+    font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    margin:0; padding:20px; background:var(--bg); color:#111;
+    display:flex; align-items:flex-start; justify-content:center;
+  }
+  .wrap{
+    width:100%; max-width:980px;
+    display:grid; grid-template-columns:360px 1fr; gap:20px;
+  }
+
+  .panel{
+    background:var(--card); border-radius:12px; padding:18px; box-shadow:0 6px 18px rgba(12,20,40,0.06);
+  }
+
+  h1{ font-size:18px; margin:0 0 8px 0; color:var(--accent) }
+  p.small{ margin:6px 0 12px 0; color:var(--muted); font-size:13px }
+
+  label{ display:block; font-size:13px; margin-bottom:6px; color:#333 }
+  input[type=file]{ display:block; margin-bottom:10px }
+  select, button, input[type=number]{
+    padding:8px 10px; border-radius:8px; border:1px solid #e3e7ee; font-size:14px;
+  }
+  .controls{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px }
+
+  .status{
+    display:flex; gap:10px; align-items:center; margin-top:8px; flex-wrap:wrap;
+  }
+  .chip{
+    background:#f1f5ff; color:var(--accent); padding:6px 10px; border-radius:999px; font-weight:600;
+  }
+  .muted{ color:var(--muted); font-size:13px }
+
+  /* Game area */
+  .game{
+    display:flex; gap:20px; align-items:flex-start;
+  }
+  .board-wrap{
+    width:100%; max-width:560px;
+    display:flex; align-items:center; justify-content:center;
+    padding:12px;
+  }
+  .board{
+    background: #111; width:360px; height:360px; border-radius:8px; display:grid; overflow:hidden;
+    touch-action: manipulation; position:relative;
+  }
+  .tile{
+    box-sizing:border-box; border:1px solid rgba(255,255,255,0.06);
+    background-repeat:no-repeat; background-position:center; background-size:cover; cursor:grab;
+    display:flex; align-items:center; justify-content:center; user-select:none; position:relative;
+  }
+  .tile.dragging{ opacity:0.6; transform:scale(1.02); cursor:grabbing }
+  .tile.correct{ box-shadow:inset 0 0 0 3px rgba(16,185,129,0.06) }
+
+  .info{
+    min-width:220px;
+  }
+  .timer{
+    font-size:28px; color:var(--accent); font-weight:700; margin:4px 0;
+  }
+  .btn{
+    background:var(--accent); color:#fff; border:none; padding:10px 14px; border-radius:8px; cursor:pointer;
+  }
+  .btn.secondary{ background:#f3f4f6; color:#111; border:1px solid #e6e9f2 }
+  .hint{ font-size:13px; color:var(--muted); margin-top:12px }
+
+  .footer{ margin-top:14px; font-size:13px; color:var(--muted) }
+
+  /* Responsive */
+  @media (max-width:860px){
+    .wrap{ grid-template-columns: 1fr; }
+    .board{ width:320px; height:320px; }
+  }
+  @media (max-width:420px){
+    .board{ width:280px; height:280px; }
+  }
+
+  /* small number label */
+  .tile .label {
+    position:absolute; top:6px; left:6px; font-size:12px; color:rgba(255,255,255,0.9);
+    text-shadow:0 1px 2px rgba(0,0,0,0.6);
+    background:rgba(0,0,0,0.18); padding:2px 6px; border-radius:999px;
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <h1>Sanjeev's Game Picture Rebuild — 3 Minute Challenge</h1>
+      <p class="small">Upload an image, choose grid size, press <strong>Start</strong>. Shuffle is random. Rebuild the picture before the 3:00 timer runs out.</p>
+
+      <label for="imgfile">Choose image</label>
+      <input id="imgfile" type="file" accept="image/*">
+
+      <label for="grid">Grid size (N × N)</label>
+      <select id="grid">
+        <option value="2">2 × 2</option>
+        <option value="3" selected>3 × 3</option>
+        <option value="4">4 × 4</option>
+        <option value="5">5 × 5</option>
+      </select>
+
+      <div class="controls">
+        <button id="startBtn" class="btn">Start</button>
+        <button id="resetBtn" class="btn secondary">Reset</button>
+        <label style="display:flex;align-items:center;gap:6px;margin-left:auto">
+          <input id="showNumbers" type="checkbox"> <span class="muted" style="font-size:13px">Show numbers</span>
+        </label>
+      </div>
+
+      <div class="status">
+        <div class="chip" id="moves">Moves: 0</div>
+        <div class="chip" id="bestTime" style="background:#fff6e6;color:#b45309;border:1px solid #ffe8c2">Best: —</div>
+        <div style="margin-left:auto" class="muted" id="lastMsg">Waiting...</div>
+      </div>
+
+      <div class="footer">
+        Tip: On mobile, tap a tile to select it, then tap another to swap. On desktop you can drag tiles.
+      </div>
+    </div>
+
+    <div class="panel game">
+      <div class="board-wrap">
+        <div id="board" class="board" aria-label="Puzzle board"></div>
+      </div>
+
+      <div class="info">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <div class="muted">Time left</div>
+            <div id="timer" class="timer">03:00</div>
+          </div>
+          <div>
+            <div class="muted">Tiles</div>
+            <div id="tilesCount" class="chip">—</div>
+          </div>
+        </div>
+
+        <div style="margin-top:18px">
+          <button id="giveUp" class="btn secondary">Give up / Reveal</button>
+          <button id="download" class="btn" style="margin-left:8px">Download Puzzle Image</button>
+        </div>
+
+        <div class="hint">
+          You can replace the image and click Start again to play a new puzzle. Best times are stored locally (browser).
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* Robust puzzle using per-tile canvases to avoid duplication issues.
+   Keeps all UI and UX from the original aesthetic design.
+*/
+
+const fileInput = document.getElementById('imgfile');
+const gridSelect = document.getElementById('grid');
+const startBtn = document.getElementById('startBtn');
+const resetBtn = document.getElementById('resetBtn');
+const board = document.getElementById('board');
+const timerEl = document.getElementById('timer');
+const movesEl = document.getElementById('moves');
+const tilesCountEl = document.getElementById('tilesCount');
+const giveUpBtn = document.getElementById('giveUp');
+const downloadBtn = document.getElementById('download');
+const showNumbers = document.getElementById('showNumbers');
+const lastMsg = document.getElementById('lastMsg');
+const bestTimeEl = document.getElementById('bestTime');
+
+let imageObj = null;
+let N = 3;
+let tiles = []; // { index, currentIndex, el, imgDataUrl }
+let dragSrc = null;
+let selectedTile = null;
+let moves = 0;
+let timer = null;
+let timeLeft = 180; // seconds
+let startedAt = null;
+const bestTimesKey = 'puzzle_best_times_v1';
+
+// Helpers
+function fmtTime(s){
+  if (s < 0) s = 0;
+  const m = Math.floor(s/60).toString().padStart(2,'0');
+  const sec = Math.floor(s%60).toString().padStart(2,'0');
+  return `${m}:${sec}`;
+}
+
+function loadImageFile(file){
+  return new Promise((res,rej)=>{
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    const url = URL.createObjectURL(file);
+    img.onload = ()=> { URL.revokeObjectURL(url); res(img); };
+    img.onerror = (e)=> rej(e);
+    img.src = url;
+  });
+}
+
+function cropSquareImage(img){
+  // returns canvas with square crop (largest centered square)
+  const size = Math.min(img.naturalWidth || img.width, img.naturalHeight || img.height);
+  const sx = Math.floor((img.naturalWidth - size)/2);
+  const sy = Math.floor((img.naturalHeight - size)/2);
+  const c = document.createElement('canvas');
+  c.width = size; c.height = size;
+  const ctx = c.getContext('2d');
+  ctx.drawImage(img, sx, sy, size, size, 0, 0, size, size);
+  return c;
+}
+
+function clearBoard(){
+  board.innerHTML = '';
+  board.style.gridTemplateColumns = '';
+  tiles = [];
+  moves = 0;
+  movesEl.textContent = 'Moves: 0';
+  tilesCountEl.textContent = '—';
+  lastMsg.textContent = 'Waiting...';
+  stopTimer();
+  timerEl.textContent = fmtTime(180);
+  selectedTile = null;
+  dragSrc = null;
+}
+
+/* create per-tile small canvas images (data URLs) — robust and exact */
+function createTilesFromCanvas(sourceCanvas, n){
+  const size = sourceCanvas.width; // square
+  const tilePx = Math.floor(size / n); // integer tile size (floor)
+  // We'll use exact tilePx for each tile; the leftover right/bottom pixels (if any) will be included in the last row/col
+  const tilesData = [];
+  for(let r=0;r<n;r++){
+    for(let c=0;c<n;c++){
+      // compute width/height for this tile (last row/col may include remainder)
+      const sx = c * tilePx;
+      const sy = r * tilePx;
+      const sw = (c === n-1) ? (size - sx) : tilePx;
+      const sh = (r === n-1) ? (size - sy) : tilePx;
+
+      const tc = document.createElement('canvas');
+      tc.width = sw; tc.height = sh;
+      const tctx = tc.getContext('2d');
+      // draw exact region from source canvas
+      tctx.drawImage(sourceCanvas, sx, sy, sw, sh, 0, 0, sw, sh);
+      const dataUrl = tc.toDataURL('image/png');
+      tilesData.push({ r, c, w: sw, h: sh, url: dataUrl });
+    }
+  }
+  return tilesData;
+}
+
+/* setup board using tile-data (each tile has its own small image) */
+function setupBoardFromCanvas(canvas, n){
+  // determine display size (keep square, responsive)
+  const boardRect = board.getBoundingClientRect();
+  const defaultSize = 360;
+  let displaySize = defaultSize;
+  if(boardRect.width && boardRect.height){
+    displaySize = Math.max(280, Math.min(defaultSize, Math.floor(Math.min(boardRect.width, boardRect.height))));
+  }
+  // set CSS grid to n columns
+  board.style.width = displaySize + 'px';
+  board.style.height = displaySize + 'px';
+  board.style.gridTemplateColumns = `repeat(${n}, 1fr)`;
+
+  // create tiles from canvas (exact pixel regions)
+  const tileData = createTilesFromCanvas(canvas, n);
+
+  tiles = [];
+  const total = n * n;
+  for(let i=0;i<total;i++){
+    const t = tileData[i];
+    const el = document.createElement('div');
+    el.className = 'tile';
+    el.draggable = true;
+    // make each tile fill its grid cell
+    el.style.width = '100%';
+    el.style.height = '100%';
+    // use the small tile image as background
+    el.style.backgroundImage = `url(${t.url})`;
+    el.style.backgroundSize = 'cover';
+    el.style.backgroundPosition = 'center';
+    // store metadata
+    const tileObj = { index: i, currentIndex: i, el, imgUrl: t.url };
+    tiles.push(tileObj);
+
+    // optional number
+    if(showNumbers.checked){
+      const lbl = document.createElement('div');
+      lbl.className = 'label';
+      lbl.textContent = (i+1);
+      el.appendChild(lbl);
+    }
+
+    attachTileEvents(el, tileObj);
+    board.appendChild(el);
+  }
+
+  tilesCountEl.textContent = `${n}×${n} (${total})`;
+}
+
+/* attach drag/drop and click swap handlers */
+function attachTileEvents(el, tileObj){
+  // DRAG start / end
+  el.addEventListener('dragstart', (e)=>{
+    dragSrc = tileObj;
+    el.classList.add('dragging');
+    try{ e.dataTransfer.setDragImage(el, 10,10); }catch(e){}
+  });
+  el.addEventListener('dragend', ()=>{ el.classList.remove('dragging'); dragSrc = null; });
+
+  el.addEventListener('dragover', (e)=> { e.preventDefault(); });
+  el.addEventListener('drop', (e)=>{
+    e.preventDefault();
+    const target = tileObj;
+    if(dragSrc && dragSrc !== target){
+      swapTiles(dragSrc.currentIndex, target.currentIndex);
+    }
+    dragSrc = null;
+  });
+
+  // click-to-swap mobile fallback
+  el.addEventListener('click', (e)=>{
+    if(!startedAt) return; // only when game running
+    if(!selectedTile){
+      selectedTile = tileObj;
+      el.style.outline = '3px solid rgba(34,76,164,0.25)';
+      el.style.zIndex = 2;
+    } else if(selectedTile === tileObj){
+      el.style.outline = '';
+      el.style.zIndex = '';
+      selectedTile = null;
+    } else {
+      const a = selectedTile;
+      const b = tileObj;
+      a.el.style.outline = '';
+      a.el.style.zIndex = '';
+      selectedTile = null;
+      swapTiles(a.currentIndex, b.currentIndex);
+    }
+  });
+
+  // prevent default touch behavior
+  el.addEventListener('touchstart',(e)=>{ e.stopPropagation(); }, {passive:true});
+}
+
+/* swap logic — swap tile images and currentIndex */
+function swapTiles(iA, iB){
+  if(iA === iB) return;
+  const a = tiles.find(t=>t.currentIndex === iA);
+  const b = tiles.find(t=>t.currentIndex === iB);
+  if(!a || !b) return;
+
+  // swap background images
+  const tmpImg = a.el.style.backgroundImage;
+  a.el.style.backgroundImage = b.el.style.backgroundImage;
+  b.el.style.backgroundImage = tmpImg;
+
+  // swap stored imgUrl too (keeps consistency for reveal/download)
+  const tmpUrl = a.imgUrl;
+  a.imgUrl = b.imgUrl;
+  b.imgUrl = tmpUrl;
+
+  // swap currentIndex markers
+  const tmpIdx = a.currentIndex;
+  a.currentIndex = b.currentIndex;
+  b.currentIndex = tmpIdx;
+
+  moves++;
+  movesEl.textContent = 'Moves: ' + moves;
+
+  checkSolved();
+}
+
+/* shuffle: random permutation of currentIndex and images */
+function shuffleTiles(){
+  const Ntiles = tiles.length;
+  // Fisher-Yates permutation of image positions
+  const perm = Array.from({length:Ntiles}, (_,i)=>i);
+  for(let i=Ntiles-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [perm[i], perm[j]] = [perm[j], perm[i]];
+  }
+  // apply perm: set tile k to show image originally at perm[k]
+  // We'll reassign both imgUrl/backgroundImage and currentIndex
+  const imgUrls = tiles.map(t => t.imgUrl);
+  for(let k=0;k<Ntiles;k++){
+    const sourceIdx = perm[k];
+    tiles[k].imgUrl = imgUrls[sourceIdx];
+    tiles[k].el.style.backgroundImage = `url(${tiles[k].imgUrl})`;
+    tiles[k].currentIndex = sourceIdx;
+  }
+}
+
+/* check solved: every tile.currentIndex === tile.index */
+function checkSolved(){
+  let ok = true;
+  tiles.forEach(t=>{
+    if(t.currentIndex !== t.index) ok = false;
+    if(t.currentIndex === t.index) t.el.classList.add('correct'); else t.el.classList.remove('correct');
+  });
+  if(ok){
+    endGame(true);
+  }
+}
+
+/* timer control */
+function startTimer(){
+  stopTimer();
+  timeLeft = 180;
+  timerEl.textContent = fmtTime(timeLeft);
+  timer = setInterval(()=>{
+    timeLeft--;
+    timerEl.textContent = fmtTime(timeLeft);
+    if(timeLeft <= 0){
+      endGame(false);
+    }
+  }, 1000);
+}
+function stopTimer(){
+  if(timer){ clearInterval(timer); timer = null; }
+}
+
+function endGame(won){
+  stopTimer();
+  startedAt = null;
+  if(won){
+    const used = 180 - timeLeft;
+    lastMsg.textContent = `Solved in ${fmtTime(used)} 🎉`;
+    updateBestTime(used);
+    showConfetti();
+  } else {
+    lastMsg.textContent = 'Time up — try again or Reveal to see original.';
+    // reveal original images by placing each tile with its original imgUrl
+    tiles.forEach(t=>{
+      // original is tile.index
+      const original = tiles.find(x => x.index === t.index);
+      // but original.imgUrl may have been permuted; better recreate from source canvas:
+      // to keep simple: set the image to the currently stored imgUrl that matches original index
+      // find tile object that currently corresponds to index t.index (search by currentIndex)
+      const correct = tiles.find(x => x.index === t.index);
+      t.el.style.backgroundImage = `url(${correct.imgUrl})`;
+      t.currentIndex = t.index;
+      t.el.classList.add('correct');
+    });
+  }
+}
+
+/* best time persistence */
+function updateBestTime(sec){
+  let data = JSON.parse(localStorage.getItem(bestTimesKey) || '{}');
+  const g = N;
+  const prev = data[g];
+  if(!prev || sec < prev){
+    data[g] = sec;
+    localStorage.setItem(bestTimesKey, JSON.stringify(data));
+    bestTimeEl.textContent = 'Best: ' + fmtTime(sec);
+    bestTimeEl.style.background = '#ecfdf5';
+    bestTimeEl.style.color = '#065f46';
+    lastMsg.textContent += ' — New best!';
+  } else {
+    bestTimeEl.textContent = 'Best: ' + fmtTime(prev);
+  }
+}
+function loadBestTime(){
+  const data = JSON.parse(localStorage.getItem(bestTimesKey) || '{}');
+  if(data && data[N]) bestTimeEl.textContent = 'Best: ' + fmtTime(data[N]);
+  else bestTimeEl.textContent = 'Best: —';
+}
+
+/* confetti */
+function showConfetti(){
+  const c = document.createElement('div');
+  c.style.position='fixed'; c.style.left='0'; c.style.top='0'; c.style.width='100%'; c.style.height='100%';
+  c.style.pointerEvents='none';
+  document.body.appendChild(c);
+  const colors = ['#ef4444','#f97316','#f59e0b','#10b981','#3b82f6','#8b5cf6'];
+  for(let i=0;i<60;i++){
+    const d = document.createElement('div');
+    const size = Math.random()*10 + 6;
+    d.style.width = d.style.height = size+'px';
+    d.style.background = colors[Math.floor(Math.random()*colors.length)];
+    d.style.position='absolute';
+    d.style.left = (50 + (Math.random()-0.5)*80)+'%';
+    d.style.top = (20 + Math.random()*60)+'%';
+    d.style.opacity = '0.95';
+    d.style.borderRadius='50%';
+    d.style.transform = `translate(-50%,-50%) translateY(${(Math.random()-0.5)*200}px)`;
+    d.style.transition = 'transform 1s ease-out, opacity 1s';
+    c.appendChild(d);
+    setTimeout(()=>{ d.style.transform = `translate(-50%,-50%) translateY(${400 + Math.random()*200}px) rotate(${Math.random()*360}deg)`; d.style.opacity='0'; }, 20 + i*10);
+  }
+  setTimeout(()=>document.body.removeChild(c), 1400);
+}
+
+/* UI actions */
+startBtn.addEventListener('click', async ()=>{
+  if(!imageObj){
+    alert('Please choose an image first.');
+    return;
+  }
+  N = parseInt(gridSelect.value,10);
+  clearBoard();
+  const squareCanvas = cropSquareImage(imageObj);
+  setupBoardFromCanvas(squareCanvas, N);
+  shuffleTiles();
+  moves = 0; movesEl.textContent = 'Moves: 0';
+  startedAt = Date.now();
+  startTimer();
+  loadBestTime();
+  lastMsg.textContent = 'Game started! Good luck.';
+});
+
+resetBtn.addEventListener('click', ()=>{
+  clearBoard();
+  if(imageObj){
+    const canvas = cropSquareImage(imageObj);
+    N = parseInt(gridSelect.value,10);
+    setupBoardFromCanvas(canvas, N);
+    lastMsg.textContent = 'Preview (not started). Click Start to begin.';
+  }
+});
+
+fileInput.addEventListener('change', async (e)=>{
+  const f = e.target.files && e.target.files[0];
+  if(!f) return;
+  try{
+    const img = await loadImageFile(f);
+    imageObj = img;
+    const canvas = cropSquareImage(img);
+    N = parseInt(gridSelect.value,10);
+    clearBoard();
+    setupBoardFromCanvas(canvas, N);
+    lastMsg.textContent = 'Preview ready. Click Start to shuffle and begin the 3:00 timer.';
+    loadBestTime();
+  }catch(err){
+    console.error(err);
+    alert('Failed to load image.');
+  }
+});
+
+giveUpBtn.addEventListener('click', ()=>{
+  if(!imageObj) return;
+  stopTimer();
+  // reveal correct image by re-creating tiles from source and applying original tile images
+  const canvas = cropSquareImage(imageObj);
+  const tileData = createTilesFromCanvas(canvas, N);
+  tiles.forEach((t, idx) => {
+    t.el.style.backgroundImage = `url(${tileData[idx].url})`;
+    t.imgUrl = tileData[idx].url;
+    t.currentIndex = t.index;
+    t.el.classList.add('correct');
+  });
+  lastMsg.textContent = 'Revealed the original image.';
+});
+
+downloadBtn.addEventListener('click', async ()=>{
+  if(!imageObj){
+    alert('Load an image first.');
+    return;
+  }
+  const canvas = cropSquareImage(imageObj);
+  const url = canvas.toDataURL('image/png');
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'puzzle-image.png';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+});
+
+/* showNumbers toggle */
+showNumbers.addEventListener('change', ()=>{
+  tiles.forEach(t=>{
+    const spans = t.el.querySelectorAll('.label');
+    spans.forEach(s=>s.remove());
+    if(showNumbers.checked){
+      const lbl = document.createElement('div');
+      lbl.className = 'label';
+      lbl.textContent = (t.index+1);
+      t.el.appendChild(lbl);
+    }
+  });
+});
+
+/* initial state */
+clearBoard();
+board.addEventListener('contextmenu', e=>e.preventDefault()); // disable right-click menu on board
+
+// On resize adjust preview size before start
+window.addEventListener('resize', ()=>{
+  if(!imageObj) return;
+  if(!startedAt){
+    const canvas = cropSquareImage(imageObj);
+    const prevN = N;
+    clearBoard();
+    setupBoardFromCanvas(canvas, prevN);
+  }
+});
+</script>
+</body>
+</html>
